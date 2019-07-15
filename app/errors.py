@@ -3,7 +3,7 @@
 
 from loguru import logger
 import time
-import calender
+import calendar
 import sys
 
 def request_http_error(exc, auth, errors):
@@ -26,7 +26,7 @@ def request_http_error(exc, auth, errors):
         delta = max(10, reset - gm_now)
 
         limit = headers.get('x-ratelimit-limit')
-        logger.error'Exceeded rate limit of {} requests; waiting {} seconds to reset'.format(limit, delta),  # noqa
+        logger.error('Exceeded rate limit of {} requests; waiting {} seconds to reset'.format(limit, delta),  # noqa
               file=sys.stderr)
 
         if auth is None:

@@ -684,17 +684,17 @@ def filter_repositories(args, unfiltered_repositories):
 
 def backup_repositories(args, output_directory, repositories):
     log_info('Backing up repositories')
-    repos_template = 'https://{0}/repos'.format(get_github_api_host(args))
+    repos_template = 'https://{0}/repos'.format(get_github_api_host())
 
-    if args.incremental:
-        last_update = max(list(repository['updated_at'] for repository in repositories) or [time.strftime('%Y-%m-%dT%H:%M:%SZ', time.localtime())])  # noqa
-        last_update_path = os.path.join(output_directory, 'last_update')
-        if os.path.exists(last_update_path):
-            args.since = open(last_update_path).read().strip()
-        else:
-            args.since = None
-    else:
-        args.since = None
+    # if args.incremental:
+    #     last_update = max(list(repository['updated_at'] for repository in repositories) or [time.strftime('%Y-%m-%dT%H:%M:%SZ', time.localtime())])  # noqa
+    #     last_update_path = os.path.join(output_directory, 'last_update')
+    #     if os.path.exists(last_update_path):
+    #         args.since = open(last_update_path).read().strip()
+    #     else:
+    #         args.since = None
+    # else:
+    #     args.since = None
 
     for repository in repositories:
         if repository.get('is_gist'):
@@ -709,10 +709,12 @@ def backup_repositories(args, output_directory, repositories):
         repo_dir = os.path.join(repo_cwd, 'repository')
         repo_url = get_github_repo_url(args, repository)
 
-        include_gists = (args.include_gists or args.include_starred_gists)
-        if (args.include_repository or args.include_everything) \
-                or (include_gists and repository.get('is_gist')):
-            repo_name = repository.get('name') if not repository.get('is_gist') else repository.get('id')
+        
+        #include_gists = (args.include_gists or args.include_starred_gists)
+        #if (args.include_repository or args.include_everything) \
+        #       or (include_gists and repository.get('is_gist')):
+        repo_name = repository.get('name') if not repository.get('is_gist') else repository.get('id')
+            
             fetch_repository(repo_name,
                              repo_url,
                              repo_dir,

@@ -11,7 +11,9 @@ from urllib.request import HTTPRedirectHandler
 from urllib.request import build_opener
 import socket
 import os
+import json
 from loguru import logger
+from errors import request_http_error, request_url_error
 
 
 
@@ -63,16 +65,16 @@ def get_response(request, auth, template):
         try:
             r = urlopen(request)
         except HTTPError as exc:
-            errors, should_continue = _request_http_error(exc, auth, errors)  # noqa
+            errors, should_continue = request_http_error(exc, auth, errors)  # noqa
             r = exc
         except URLError as e:
             logger.warning(e.reason)
-            should_continue = _request_url_error(template, retry_timeout)
+            should_continue = request_url_error(template, retry_timeout)
             if not should_continue:
                 raise
         except socket.error as e:
             logger.warning(e.strerror)
-            should_continue = _request_url_error(template, retry_timeout)
+            should_continue = request_url_error(template, retry_timeout)
             if not should_continue:
                 raise
 
@@ -81,3 +83,8 @@ def get_response(request, auth, template):
 
         break
     return r, errors
+
+
+def c_pretty_print(data):
+    p = json.dumps(data, indent=4, sort_keys=True)
+    logger.info(p)
