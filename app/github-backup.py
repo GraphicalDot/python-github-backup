@@ -41,8 +41,9 @@ except ImportError:
     from urllib2 import HTTPRedirectHandler
     from urllib2 import build_opener
 
-from github_backup import __version__
+#from github_backup import __version__
 
+__version__ = "3.9.9"
 FNULL = open(os.devnull, 'w')
 
 
@@ -365,7 +366,9 @@ def get_auth(args, encode=True):
     if not encode:
         return auth
 
-    return base64.b64encode(auth.encode('ascii'))
+    basic_auth = base64.b64encode(auth.encode('ascii'))
+    print (basic_auth)
+    return basic_auth
 
 
 def get_github_api_host(args):
@@ -582,6 +585,7 @@ def download_file(url, path, auth):
 
 def get_authenticated_user(args):
     template = 'https://{0}/user'.format(get_github_api_host(args))
+    print (f'THis is the template from authenticated_user {template}')
     data = retrieve_data(args, template, single_request=True)
     return data[0]
 
@@ -599,6 +603,7 @@ def retrieve_repositories(args, authenticated_user):
         # we must use the /user/repos API to be able to access private repos
         template = 'https://{0}/user/repos'.format(
             get_github_api_host(args))
+        print (f"Template for retrieve_repos is {template}")
     else:
         if args.private and not args.organization:
             log_warning('Authenticated user is different from user being backed up, thus private repositories cannot be accessed')
@@ -1095,6 +1100,7 @@ def json_dump(data, output_file):
 
 def main():
     args = parse_args()
+    print (args)
 
     output_directory = os.path.realpath(args.output_directory)
     if not os.path.isdir(output_directory):
@@ -1108,9 +1114,9 @@ def main():
 
     authenticated_user = get_authenticated_user(args)
     repositories = retrieve_repositories(args, authenticated_user)
-    repositories = filter_repositories(args, repositories)
-    backup_repositories(args, output_directory, repositories)
-    backup_account(args, output_directory)
+    # repositories = filter_repositories(args, repositories)
+    # backup_repositories(args, output_directory, repositories)
+    # backup_account(args, output_directory)
 
 
 if __name__ == '__main__':
