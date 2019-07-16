@@ -987,9 +987,11 @@ def fetch_repository(name,
     if clone_exists and skip_existing:
         return
 
-    masked_remote_url = mask_password(remote_url)
+    ##this function is beyond my comprehension
 
-    initialized = subprocess.call('git ls-remote ' + remote_url,
+    #masked_remote_url = mask_password(remote_url)
+    logger.info(f"This is the remote url {remote_url}")
+    initialized = subprocess.call('git ls-remote ' + masked_remote_url,
                                   stdout=FNULL,
                                   stderr=FNULL,
                                   shell=True)
@@ -1013,6 +1015,7 @@ def fetch_repository(name,
         else:
             git_command = ['git', 'remote', 'set-url', 'origin', remote_url]
             logging_subprocess(git_command, None, cwd=local_dir)
+
 
         if lfs_clone:
             git_command = ['git', 'lfs', 'fetch', '--all', '--force', '--tags', '--prune']

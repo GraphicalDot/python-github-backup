@@ -35,7 +35,7 @@ def os_command_output(command, final_message):
     return 
 
 
-def generate_new_keys():
+def generate_new_keys(username, password):
     key = RSA.generate(4096)
     #ssh-keygen -t rsa -C "your_email@example.com"
     home = os.path.expanduser("~")
@@ -51,8 +51,6 @@ def generate_new_keys():
         with open(public_key_path, 'wb') as content_file:
             content_file.write(pubkey.exportKey('OpenSSH'))
 
-        username = "graphicaldot"
-        password = "Groot1234#"
         public_bytes = pubkey.exportKey('OpenSSH').decode()
         response = requests.post('https://api.github.com/user/keys', auth=(username, password), data=json.dumps({
                 "title": "Datapod", "key": public_bytes
