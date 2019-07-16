@@ -5,7 +5,7 @@ from auth import get_auth,  get_github_api_host
 from urllib.request import Request
 from utils import construct_request, get_response, ensure_directory, \
         c_pretty_print, mask_password, logging_subprocess
-
+import time 
 from loguru import logger
 from pprint import pformat
 import json
@@ -186,6 +186,7 @@ def backup_repositories(username, password, output_directory, repositories):
     #     args.since = None
 
     for repository in repositories:
+        time.sleep(5)
         if repository.get('is_gist'):
             repo_cwd = os.path.join(output_directory, 'gists', repository['id'])
         elif repository.get('is_starred'):
@@ -339,7 +340,7 @@ def fetch_repository(name,
 
 
 def main():
-    import sys
+    from config import config_object
     try:
         username = sys.argv[1]
         password = sys.argv[2]
@@ -347,21 +348,22 @@ def main():
     except :
         logger.error("Please provide username and password for your github") 
     print ("Execution started")
-    dirname = os.path.dirname(os.path.abspath(__file__))
+    # dirname = os.path.dirname(os.path.abspath(__file__))
 
-    output_directory = os.path.join(dirname, "account") 
+    # output_directory = os.path.join(dirname, "account") 
     # if args.lfs_clone:
     #     check_git_lfs_install()
-    ensure_directory(output_directory)
-    logger.info('Backing up user {0} to {1}'.format(username, output_directory))
+    logger.info('Backing up user {0} to {1}'.format(username, config_object.GITHUB_OUTPUT_DIR))
+
+    ensure_directory(config_object.GITHUB_OUTPUT_DIR)
 
     authenticated_user = get_authenticated_user(username, password)
 
     print (authenticated_user)
     repositories = retrieve_repositories(username, password)
-    # repositories = filter_repositories(args, repositories)
-    backup_repositories(username, password, output_directory, repositories)
-    # backup_account(args, output_directory)
+    #repositories = filter_repositories(args, repositories)
+    backup_repositories(username, password, config_object.GITHUB_OUTPUT_DIR, repositories)
+    # # backup_account(args, output_directory)
 
 if __name__ == "__main__":
     main()
