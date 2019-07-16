@@ -14,7 +14,67 @@ import os
 import json
 from loguru import logger
 from errors import request_http_error, request_url_error
+import subprocess
+import sys
+import select
 
+
+def logging_subprocess(popenargs,
+                       logger,
+                       stdout_log_level=logger.debug,
+                       stderr_log_level=logger.error,
+                       **kwargs):
+    """
+    Variant of subprocess.call that accepts a logger instead of stdout/stderr,
+    and logs stdout messages via logger.debug and stderr messages via
+    logger.error.
+    """
+    child = subprocess.Popen(popenargs, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, **kwargs)
+    if sys.platform == 'win32':
+        log_info("Windows operating system detected - no subprocess logging will be returned")
+
+    log_level = {child.stdout: stdout_log_level,
+                 child.stderr: stderr_log_level}
+
+    def check_io():
+        if sys.platform == 'win32':
+            return
+        ready_to_read = select.select([child.stdout, child.stderr],
+                                      [],
+                                      [],
+                                      1000)[0]
+        for io in ready_to_read:
+            line = io.readline()
+            if not logger:
+                continue
+            if not (io == child.stderr and not line):
+                logger.log(log_level[io], line[:-1])
+
+    # keep checking stdout/stderr until the child exits
+    while child.poll() is None:
+        check_io()
+
+    check_io()  # check again to catch anything after the process exits
+
+    rc = child.wait()
+
+    if rc != 0:
+        print ('{} returned {}:'.format(popenargs[0], rc), file=sys.stderr)
+        print('\t', ' '.join(popenargs), file=sys.stderr)
+
+    return rc
+
+
+def mask_password(url, secret='*****'):
+    parsed = urlparse(url)
+
+    if not parsed.password:
+        return url
+    elif parsed.password == 'x-oauth-basic':
+        return url.replace(parsed.username, secret)
+
+    return url.replace(parsed.password, secret)
 
 
 def mkdir_p(*args):

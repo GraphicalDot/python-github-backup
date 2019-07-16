@@ -3,11 +3,17 @@ import os
 import sys
 from auth import get_auth,  get_github_api_host
 from urllib.request import Request
-from utils import construct_request, get_response, ensure_directory, c_pretty_print
+from utils import construct_request, get_response, ensure_directory, \
+        c_pretty_print, mask_password, logging_subprocess
 
 from loguru import logger
 from pprint import pformat
 import json
+import subprocess
+__version__ = "3.9.9"
+FNULL = open(os.devnull, 'w')
+
+
 
 def get_authenticated_user(username, password):
     template = 'https://{0}/user'.format(get_github_api_host())
@@ -132,10 +138,41 @@ def retrieve_repositories(username, password):
 
     return repos
 
+def get_github_host():
+    ##TODO include gitgub host too
+    # if args.github_host:
+    #     host = args.github_host
+    # else:
+    #     host = 'github.com'
+    
+    host = 'github.com'
+    return host
+
+def get_github_repo_url(username, password, repository):
+    # if args.prefer_ssh:
+    #     return repository['ssh_url']
+
+    if repository.get('is_gist'):
+        return repository['git_pull_url']
+    
 
 
-def backup_repositories(args, output_directory, repositories):
-    log_info('Backing up repositories')
+    ##if its a private url
+    auth = get_auth(username, password, False)
+    if auth:
+        logger.info(f"Auth is prsent {auth}")
+        repo_url = 'https://{0}@{1}/{2}/{3}.git'.format(
+            auth,
+            get_github_host(),
+            repository['owner']['login'],
+            repository['name'])
+    else:
+        repo_url = repository['clone_url']
+
+    return repo_url
+
+def backup_repositories(username, password, output_directory, repositories):
+    logger.info('Backing up repositories')
     repos_template = 'https://{0}/repos'.format(get_github_api_host())
 
     # if args.incremental:
@@ -159,59 +196,60 @@ def backup_repositories(args, output_directory, repositories):
             repo_cwd = os.path.join(output_directory, 'repositories', repository['name'])
 
         repo_dir = os.path.join(repo_cwd, 'repository')
-        repo_url = get_github_repo_url(args, repository)
+        repo_url = get_github_repo_url(username, password, repository)
+        #ensure_directory(repo_dir)
 
+        masked_remote_url = mask_password(repo_url)
+
+        logger.info(f"The repo dir on the user machine is {repo_dir}")
+        logger.info(f"The repo url on the github is {repo_url}")
+        logger.info(f"The masked_repo url on the github is {masked_remote_url}")
         
-        #include_gists = (args.include_gists or args.include_starred_gists)
-        #if (args.include_repository or args.include_everything) \
-        #       or (include_gists and repository.get('is_gist')):
+    #     #include_gists = (args.include_gists or args.include_starred_gists)
+    #     #if (args.include_repository or args.include_everything) \
+    #     #       or (include_gists and repository.get('is_gist')):
         repo_name = repository.get('name') if not repository.get('is_gist') else repository.get('id')
             
-        fetch_repository(repo_name,
-                             repo_url,
-                             repo_dir,
-                             skip_existing=args.skip_existing,
-                             bare_clone=args.bare_clone,
-                             lfs_clone=args.lfs_clone)
+        fetch_repository(repo_name, repo_url, repo_dir)
 
-            if repository.get('is_gist'):
-                # dump gist information to a file as well
-                output_file = '{0}/gist.json'.format(repo_cwd)
-                with codecs.open(output_file, 'w', encoding='utf-8') as f:
-                    json_dump(repository, f)
+    #         if repository.get('is_gist'):
+    #             # dump gist information to a file as well
+    #             output_file = '{0}/gist.json'.format(repo_cwd)
+    #             with codecs.open(output_file, 'w', encoding='utf-8') as f:
+    #                 json_dump(repository, f)
 
-                continue  # don't try to back anything else for a gist; it doesn't exist
+    #             continue  # don't try to back anything else for a gist; it doesn't exist
 
-        download_wiki = (args.include_wiki or args.include_everything)
-        if repository['has_wiki'] and download_wiki:
-            fetch_repository(repository['name'],
-                             repo_url.replace('.git', '.wiki.git'),
-                             os.path.join(repo_cwd, 'wiki'),
-                             skip_existing=args.skip_existing,
-                             bare_clone=args.bare_clone,
-                             lfs_clone=args.lfs_clone)
+    #     download_wiki = (args.include_wiki or args.include_everything)
+    #     if repository['has_wiki'] and download_wiki:
+    #         fetch_repository(repository['name'],
+    #                          repo_url.replace('.git', '.wiki.git'),
+    #                          os.path.join(repo_cwd, 'wiki'),
+    #                          skip_existing=args.skip_existing,
+    #                          bare_clone=args.bare_clone,
+    #                          lfs_clone=args.lfs_clone)
 
-        if args.include_issues or args.include_everything:
-            backup_issues(args, repo_cwd, repository, repos_template)
+    #     if args.include_issues or args.include_everything:
+    #         backup_issues(args, repo_cwd, repository, repos_template)
 
-        if args.include_pulls or args.include_everything:
-            backup_pulls(args, repo_cwd, repository, repos_template)
+    #     if args.include_pulls or args.include_everything:
+    #         backup_pulls(args, repo_cwd, repository, repos_template)
 
-        if args.include_milestones or args.include_everything:
-            backup_milestones(args, repo_cwd, repository, repos_template)
+    #     if args.include_milestones or args.include_everything:
+    #         backup_milestones(args, repo_cwd, repository, repos_template)
 
-        if args.include_labels or args.include_everything:
-            backup_labels(args, repo_cwd, repository, repos_template)
+    #     if args.include_labels or args.include_everything:
+    #         backup_labels(args, repo_cwd, repository, repos_template)
 
-        if args.include_hooks or args.include_everything:
-            backup_hooks(args, repo_cwd, repository, repos_template)
+    #     if args.include_hooks or args.include_everything:
+    #         backup_hooks(args, repo_cwd, repository, repos_template)
 
-        if args.include_releases or args.include_everything:
-            backup_releases(args, repo_cwd, repository, repos_template,
-                            include_assets=args.include_assets or args.include_everything)
+    #     if args.include_releases or args.include_everything:
+    #         backup_releases(args, repo_cwd, repository, repos_template,
+    #                         include_assets=args.include_assets or args.include_everything)
 
-    if args.incremental:
-        open(last_update_path, 'w').write(last_update)
+    # if args.incremental:
+    #     open(last_update_path, 'w').write(last_update)
 
 
 
@@ -221,7 +259,7 @@ def fetch_repository(name,
                      remote_url,
                      local_dir,
                      skip_existing=False,
-                     bare_clone=False,
+                     bare_clone=True,
                      lfs_clone=False):
     if bare_clone:
         if os.path.exists(local_dir):
@@ -244,12 +282,12 @@ def fetch_repository(name,
                                   stderr=FNULL,
                                   shell=True)
     if initialized == 128:
-        log_info("Skipping {0} ({1}) since it's not initialized".format(
+        logger.error("Skipping {0} ({1}) since it's not initialized".format(
             name, masked_remote_url))
         return
 
     if clone_exists:
-        log_info('Updating {0} in {1}'.format(name, local_dir))
+        logger.info('Updating {0} in {1}'.format(name, local_dir))
 
         remotes = subprocess.check_output(['git', 'remote', 'show'],
                                           cwd=local_dir)
@@ -257,20 +295,20 @@ def fetch_repository(name,
 
         if 'origin' not in remotes:
             git_command = ['git', 'remote', 'rm', 'origin']
-            logging.info(git_command, None, cwd=local_dir)
+            logging_subprocess(git_command, None, cwd=local_dir)
             git_command = ['git', 'remote', 'add', 'origin', remote_url]
-            logging.info(git_command, None, cwd=local_dir)
+            logging_subprocess(git_command, None, cwd=local_dir)
         else:
             git_command = ['git', 'remote', 'set-url', 'origin', remote_url]
-            logging.info(git_command, None, cwd=local_dir)
+            logging_subprocess(git_command, None, cwd=local_dir)
 
         if lfs_clone:
             git_command = ['git', 'lfs', 'fetch', '--all', '--force', '--tags', '--prune']
         else:
             git_command = ['git', 'fetch', '--all', '--force', '--tags', '--prune']
-        logging.info(git_command, None, cwd=local_dir)
+        logging_subprocess(git_command, None, cwd=local_dir)
     else:
-        log_info('Cloning {0} repository from {1} to {2}'.format(
+        logger.info('Cloning {0} repository from {1} to {2}'.format(
             name,
             masked_remote_url,
             local_dir))
@@ -284,7 +322,7 @@ def fetch_repository(name,
                 git_command = ['git', 'lfs', 'clone', remote_url, local_dir]
             else:
                 git_command = ['git', 'clone', remote_url, local_dir]
-        logging.info(git_command, None)
+        logging_subprocess(git_command, None)
 
 
 
@@ -309,21 +347,20 @@ def main():
     except :
         logger.error("Please provide username and password for your github") 
     print ("Execution started")
-    output_directory = "."
     dirname = os.path.dirname(os.path.abspath(__file__))
 
-    output_dirname = os.path.join(dirname, "account") 
+    output_directory = os.path.join(dirname, "account") 
     # if args.lfs_clone:
     #     check_git_lfs_install()
-    ensure_directory(output_dirname)
-    logger.info('Backing up user {0} to {1}'.format(username, output_dirname))
+    ensure_directory(output_directory)
+    logger.info('Backing up user {0} to {1}'.format(username, output_directory))
 
     authenticated_user = get_authenticated_user(username, password)
 
     print (authenticated_user)
     repositories = retrieve_repositories(username, password)
     # repositories = filter_repositories(args, repositories)
-    # backup_repositories(args, output_directory, repositories)
+    backup_repositories(username, password, output_directory, repositories)
     # backup_account(args, output_directory)
 
 if __name__ == "__main__":

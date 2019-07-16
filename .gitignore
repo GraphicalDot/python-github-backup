@@ -25,7 +25,7 @@ doc/_build
 
 # Generated man page
 doc/aws_hostname.1
-
+account
 bin
 include  
 lib
