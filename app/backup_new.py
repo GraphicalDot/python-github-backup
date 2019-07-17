@@ -148,9 +148,11 @@ def get_github_host():
     host = 'github.com'
     return host
 
-def get_github_repo_url(username, password, repository):
+def get_github_repo_url(username, password, repository, prefer_ssh=True):
     # if args.prefer_ssh:
     #     return repository['ssh_url']
+    if prefer_ssh:
+        return repository['ssh_url']
 
     if repository.get('is_gist'):
         return repository['git_pull_url']
@@ -354,9 +356,9 @@ def main():
     except :
         logger.error("Please provide username and password for your github") 
     print ("Execution started")
-    generate_new_keys()
+    
+    generate_new_keys(username, password)
     # dirname = os.path.dirname(os.path.abspath(__file__))
-    """
     # output_directory = os.path.join(dirname, "account") 
     # if args.lfs_clone:
     #     check_git_lfs_install()
@@ -371,6 +373,6 @@ def main():
     #repositories = filter_repositories(args, repositories)
     backup_repositories(username, password, config_object.GITHUB_OUTPUT_DIR, repositories)
     # # backup_account(args, output_directory)
-    """
+    
 if __name__ == "__main__":
     main()
