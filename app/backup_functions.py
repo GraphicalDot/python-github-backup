@@ -132,36 +132,38 @@ def backup_pulls(username, password, repo_cwd, repository, repos_template):
                 json_dump(pull, f)
 
 
-def backup_milestones(args, repo_cwd, repository, repos_template):
+def backup_milestones(username, password, repo_cwd, repository, repos_template):
     milestone_cwd = os.path.join(repo_cwd, 'milestones')
-    if args.skip_existing and os.path.isdir(milestone_cwd):
-        return
+    # if args.skip_existing and os.path.isdir(milestone_cwd):
+    #     return
 
-    log_info('Retrieving {0} milestones'.format(repository['full_name']))
+    logger.info(f"Retrieving {repository['full_name']} milestones")
+
     mkdir_p(repo_cwd, milestone_cwd)
 
-    template = '{0}/{1}/milestones'.format(repos_template,
-                                           repository['full_name'])
+    template = "{repos_template}/{repository['full_name']}/milestones"
+                                           )
 
     query_args = {
         'state': 'all'
     }
 
-    _milestones = retrieve_data(args, template, query_args=query_args)
+    _milestones = retrieve_data(username, password, template, query_args=query_args)
 
     milestones = {}
     for milestone in _milestones:
         milestones[milestone['number']] = milestone
 
-    log_info('Saving {0} milestones to disk'.format(
-        len(list(milestones.keys()))))
+    log_info('Saving {len(list(milestones.keys()))} milestones to disk')
+
     for number, milestone in list(milestones.items()):
-        milestone_file = '{0}/{1}.json'.format(milestone_cwd, number)
+        milestone_file = f'{milestone}/{number}.json'
         with codecs.open(milestone_file, 'w', encoding='utf-8') as f:
             json_dump(milestone, f)
+    return 
 
 
-def backup_labels(args, repo_cwd, repository, repos_template):
+def backup_labels(username, password, repo_cwd, repository, repos_template):
     label_cwd = os.path.join(repo_cwd, 'labels')
     output_file = '{0}/labels.json'.format(label_cwd)
     template = '{0}/{1}/labels'.format(repos_template,
@@ -220,53 +222,54 @@ def backup_releases(args, repo_cwd, repository, repos_template, include_assets=F
 
 
 
-def backup_account(args, output_directory):
+def backup_account(username, password, output_directory):
     account_cwd = os.path.join(output_directory, 'account')
 
-    if args.include_starred or args.include_everything:
-        output_file = "{0}/starred.json".format(account_cwd)
-        template = "https://{0}/users/{1}/starred".format(get_github_api_host(args), args.user)
-        _backup_data(args,
-                     "starred repositories",
-                     template,
-                     output_file,
-                     account_cwd)
+    # if args.include_starred or args.include_everything:
+    output_file = f"{account_cwd}/starred.json"
+    template = "https://{0}/users/{1}/starred".format(get_github_api_host(args), args.user)
+    _backup_data(username, password,
+                    "starred repositories",
+                    template,
+                    output_file,
+                    account_cwd)
 
-    if args.include_watched or args.include_everything:
-        output_file = "{0}/watched.json".format(account_cwd)
+    # if args.include_watched or args.include_everything:
+        output_file = f"{account_cwd}/watched.json"
         template = "https://{0}/users/{1}/subscriptions".format(get_github_api_host(args), args.user)
-        _backup_data(args,
+        _backup_data(username, password,
                      "watched repositories",
                      template,
                      output_file,
                      account_cwd)
 
-    if args.include_followers or args.include_everything:
-        output_file = "{0}/followers.json".format(account_cwd)
+    # if args.include_followers or args.include_everything:
+        output_file = f"{account_cwd}/followers.json"
         template = "https://{0}/users/{1}/followers".format(get_github_api_host(args), args.user)
-        _backup_data(args,
+        _backup_data(username, password,
                      "followers",
                      template,
                      output_file,
                      account_cwd)
 
-    if args.include_following or args.include_everything:
-        output_file = "{0}/following.json".format(account_cwd)
-        template = "https://{0}/users/{1}/following".format(get_github_api_host(args), args.user)
-        _backup_data(args,
+    # if args.include_following or args.include_everything:
+        output_file = f"{account_cwd}/following.json".
+        template = f"https://{get_github_api_host(args)}/users/{username}/following"
+        _backup_d'ata(username, password,
                      "following",
                      template,
                      output_file,
                      account_cwd)
 
 
-def _backup_data(args, name, template, output_file, output_directory):
-    skip_existing = args.skip_existing
-    if not skip_existing or not os.path.exists(output_file):
-        log_info('Retrieving {0} {1}'.format(args.user, name))
-        mkdir_p(output_directory)
-        data = retrieve_data(args, template)
+def _backup_data(username, password, name, template, output_file, output_directory, overwrite=True):
+    # skip_existing = args.skip_existing
 
-        log_info('Writing {0} {1} to disk'.format(len(data), name))
+    if overwrite:
+        logger.info(f'Retrieving {username} {name}')
+        mkdir_p(output_directory)
+        data = retrieve_data(username, password, template)
+
+        logger.info(f'Writing {len(data)} {name} to disk')
         with codecs.open(output_file, 'w', encoding='utf-8') as f:
             json_dump(data, f)

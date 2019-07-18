@@ -193,6 +193,9 @@ def backup_repositories(username, password, output_directory, repositories):
                              os.path.join(repo_cwd, 'wiki'),
                             )
 
+
+        if repository.get('is_starred'):
+            continue
         #if args.include_issues or args.include_everything:
         backup_issues(username, password, repo_cwd, repository, repos_template)
 

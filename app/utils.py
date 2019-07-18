@@ -23,6 +23,7 @@ import requests
 import paramiko
 import platform
 from auth import get_auth
+import time
 #curl -u "user:pass" --data '{"title":"test-key","key":"'"$(cat ~/.ssh/id_rsa.pub)"'"}' https://api.github.com/user/keys
 
 class GithubIdentity(object):
