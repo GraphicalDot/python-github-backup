@@ -51,11 +51,11 @@ class GithubIdentity(object):
             self.ssh_dir = ssh_dir
 
         ##check if identity for the host already exists or not
-        if self.identity_exists():
+        if self.identity_exist():
             raise Exception(f"Identity for {self.hostname} already exists")
-
-        self.public_key = os.path.join(ssh_path, "git_pub.key")
-        self.private_key = os.path.join(ssh_path, "git_priv.key")
+        logger.info(f"Identity for {hostname} doesnt exists, Please run add method to generte a new identity")
+        self.public_key = os.path.join(self.ssh_dir, "git_pub.key")
+        self.private_key = os.path.join(self.ssh_dir, "git_priv.key")
 
         return 
     
@@ -83,30 +83,25 @@ class GithubIdentity(object):
         return True
 
     def add(self, username, password):
-        logging.info("Generating new ")
         privkey, pubkey = self.generate_new_keys()
 
         ##uploading the keys to the host
         self.github_upload_keys(pubkey, username, password)
         
         ##writing keys to the local ssh configuration files
-        with open(self.private_key_path, "wb") as content_file:
+        with open(self.private_key, "wb") as content_file:
             content_file.write(privkey)
 
-        command = f"chmod 400 {self.private_key_path}"
-        for res in os_command_output(command, "Setting up permissions for {self.hostname} private key"):
+        command = f"chmod 400 {self.private_key}"
+        for res in self.os_command_output(command, "Setting up permissions for {self.hostname} private key"):
             logger.info(res)
 
-        with open(self.public_key_path, 'wb') as content_file:
+        with open(self.public_key, 'wb') as content_file:
             content_file.write(pubkey)
 
 
-        command = f"ssh-add {private_key_path}"
-        for res in os_command_output(command, "New git keys"):
-            logger.info(res)
-
         self.append_ssh_config()
-        seff.add_identity()
+        self.add_identity()
         return 
     
 
@@ -128,7 +123,7 @@ class GithubIdentity(object):
         Upload the generated public key on the github
         """
         response = requests.post('https://api.github.com/user/keys', auth=(username, password), data=json.dumps({
-                "title": "Datapod", "key": pubkey.decode()
+                "title": self.key_name, "key": pubkey.decode()
                 }))
 
         res = response.json()
@@ -141,7 +136,7 @@ class GithubIdentity(object):
         return 
 
 
-    def os_command_output(command, final_message):
+    def os_command_output(self, command, final_message):
 
         process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
         while True:
@@ -156,9 +151,9 @@ class GithubIdentity(object):
     def append_ssh_config(self):
 
         if platform.system() == "Darwin":
-            conf_string = f"Host *\n\tAddKeysToAgent yes\n\UseKeychain yes\n\tIdentityFile  {private_key_path}"
+            conf_string = f"Host *\n\tAddKeysToAgent yes\n\tUseKeychain yes\n\tIdentityFile  {self.private_key}"
         else:
-            conf_string = f"Host github.com\n\tHostname github.com\n\tPreferredAuthentications publickey\n\tIdentityFile  {private_key_path}"
+            conf_string = f"Host github.com\n\tHostname github.com\n\tPreferredAuthentications publickey\n\tIdentityFile  {self.private_key}"
         logger.info("String which will be appended to the config file is {string}")
         with open(os.path.join(self.ssh_dir, "config"), "a+") as f:
             f.write(conf_string)
@@ -171,7 +166,7 @@ class GithubIdentity(object):
         with care 
         """
         command = "ssh-add -D"
-        for res in os_command_output(command, "New git keys"):
+        for res in self.os_command_output(command, "New git keys"):
             logger.info(res)
 
     def add_identity(self):
@@ -181,7 +176,7 @@ class GithubIdentity(object):
             command = "ssh-add -K {self.private_key}"
         else:
             command = "ssh-add {self.private_key}"
-        for res in os_command_output(command, "Adding new keys to ssh"):
+        for res in self.os_command_output(command, "Adding new keys to ssh"):
             logger.info(res)
         return 
 
