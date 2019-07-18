@@ -41,7 +41,7 @@ def append_ssh_config(private_key_path):
     ssh_config_path = os.path.join(home, ".ssh", "config") 
 
     string = f"Host github.com\n\tHostname github.com\n\tPreferredAuthentications publickey\n\tIdentityFile  {private_key_path}"
-    with open(ssh_config_path, "w+") as f:
+    with open(ssh_config_path, "a+") as f:
         f.write(string)
     return 
 
@@ -72,7 +72,9 @@ def check_git_identity_exists(host="github.com"):
         return True
 
     host_config = conf.lookup(host)
-    if not host_config.get("IdentityFile"):
+    logger.info(host_config)
+
+    if not host_config.get("identityfile"):
         logger.info(f"Host {host} doesnt exists, Generating new keys")
         return True
 
