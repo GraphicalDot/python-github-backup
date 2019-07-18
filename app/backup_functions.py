@@ -1,15 +1,17 @@
 
 
 import os
+from utils import mkdir_p
+from loguru import logger
+from utils import retrieve_data, retrieve_data_gen, json_dump
+import codecs
 
+def backup_issues(username, passwod, repo_cwd, repository, repos_template, since=None):
+    #has_issues_dir = os.path.isdir('{0}/issues/.git'.format(repo_cwd))
+    # if args.skip_existing and has_issues_dir:
+    #     return
 
-
-def backup_issues(args, repo_cwd, repository, repos_template):
-    has_issues_dir = os.path.isdir('{0}/issues/.git'.format(repo_cwd))
-    if args.skip_existing and has_issues_dir:
-        return
-
-    log_info('Retrieving {0} issues'.format(repository['full_name']))
+    logger.info('Retrieving {0} issues'.format(repository['full_name']))
     issue_cwd = os.path.join(repo_cwd, 'issues')
     mkdir_p(repo_cwd, issue_cwd)
 
@@ -19,23 +21,24 @@ def backup_issues(args, repo_cwd, repository, repos_template):
     _issue_template = '{0}/{1}/issues'.format(repos_template,
                                               repository['full_name'])
 
-    should_include_pulls = args.include_pulls or args.include_everything
+    should_include_pulls = True
     issue_states = ['open', 'closed']
     for issue_state in issue_states:
         query_args = {
             'filter': 'all',
             'state': issue_state
         }
-        if args.since:
-            query_args['since'] = args.since
+        ##since os the time stamp after which everything shall be scraped
+        if since:
+            query_args['since'] = since
 
-        _issues = retrieve_data(args,
+        _issues = retrieve_data(username, password,
                                 _issue_template,
                                 query_args=query_args)
         for issue in _issues:
             # skip pull requests which are also returned as issues
             # if retrieving pull requests is requested as well
-            if 'pull_request' in issue and should_include_pulls:
+            if 'pull_request' in issue:
                 issues_skipped += 1
                 continue
 
@@ -50,17 +53,17 @@ def backup_issues(args, repo_cwd, repository, repos_template):
     comments_template = _issue_template + '/{0}/comments'
     events_template = _issue_template + '/{0}/events'
     for number, issue in list(issues.items()):
-        if args.include_issue_comments or args.include_everything:
-            template = comments_template.format(number)
-            issues[number]['comment_data'] = retrieve_data(args, template)
-        if args.include_issue_events or args.include_everything:
-            template = events_template.format(number)
-            issues[number]['event_data'] = retrieve_data(args, template)
+        #if args.include_issue_comments or args.include_everything:
+        template = comments_template.format(number)
+        issues[number]['comment_data'] = retrieve_data(args, template)
+        #if args.include_issue_events or args.include_everything:
+        template = events_template.format(number)
+        issues[number]['event_data'] = retrieve_data(args, template)
 
         issue_file = '{0}/{1}.json'.format(issue_cwd, number)
         with codecs.open(issue_file, 'w', encoding='utf-8') as f:
             json_dump(issue, f)
-
+    return
 
 def backup_pulls(args, repo_cwd, repository, repos_template):
     has_pulls_dir = os.path.isdir('{0}/pulls/.git'.format(repo_cwd))

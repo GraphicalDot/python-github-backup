@@ -22,7 +22,7 @@ from Crypto.PublicKey import RSA
 import requests
 import paramiko
 import platform
-
+from auth import get_auth
 #curl -u "user:pass" --data '{"title":"test-key","key":"'"$(cat ~/.ssh/id_rsa.pub)"'"}' https://api.github.com/user/keys
 
 class GithubIdentity(object):
@@ -93,7 +93,7 @@ class GithubIdentity(object):
             content_file.write(privkey)
 
         command = f"chmod 400 {self.private_key}"
-        for res in self.os_command_output(command, "Setting up permissions for {self.hostname} private key"):
+        for res in self.os_command_output(command, f"Setting up permissions for {self.hostname} private key"):
             logger.info(res)
 
         with open(self.public_key, 'wb') as content_file:
@@ -154,7 +154,7 @@ class GithubIdentity(object):
             conf_string = f"Host *\n\tAddKeysToAgent yes\n\tUseKeychain yes\n\tIdentityFile  {self.private_key}"
         else:
             conf_string = f"Host github.com\n\tHostname github.com\n\tPreferredAuthentications publickey\n\tIdentityFile  {self.private_key}"
-        logger.info("String which will be appended to the config file is {string}")
+        logger.info(f"String which will be appended to the config file is {string}")
         with open(os.path.join(self.ssh_dir, "config"), "a+") as f:
             f.write(conf_string)
         return 
@@ -181,44 +181,6 @@ class GithubIdentity(object):
         return 
 
 
-    # def generate_new_keys(username, password):
-    #     #ssh-keygen -t rsa -C "your_email@example.com"
-    #     home = os.path.expanduser("~")
-    #     ssh_path = os.path.join(home, ".ssh")
-    #     public_key_path = os.path.join(ssh_path, "git_pub.key")
-    #     private_key_path = os.path.join(ssh_path, "git_priv.key")
-        
-    #     logger.info(f"Private key path {private_key_path}")
-    #     if check_git_identity_exists():
-        
-    #         with open(private_key_path, "wb") as content_file:
-    #             content_file.write(key.exportKey('PEM'))
-
-
-    #         command = f"chmod 400 {private_key_path}"
-    #         for res in os_command_output(command, "Change Private key Permissions"):
-    #             logger.info(res)
-
-
-    #         logger.info("Permissions set for git private key")
-    #         pubkey = key.publickey()
-    #         with open(public_key_path, 'wb') as content_file:
-    #             content_file.write(pubkey.exportKey('OpenSSH'))
-
-    #         public_bytes = pubkey.exportKey('OpenSSH').decode()
-    #         response = requests.post('https://api.github.com/user/keys', auth=(username, password), data=json.dumps({
-    #                 "title": "Datapod", "key": public_bytes
-    #                 }))
-
-            
-    #         logger.info(f"Response from updating git wiht public key {response.json()}")
-
-    #         command = f"ssh-add {private_key_path}"
-    #         for res in os_command_output(command, "New git keys"):
-    #             logger.info(res)
-    #         append_ssh_config(private_key_path)
-        
-    #     return 
 
 
 
@@ -302,7 +264,59 @@ def ensure_directory(dirname):
     # if args.lfs_clone:
     #     check_git_lfs_install()
 
+def retrieve_data(username, password, template, query_args=None, single_request=False):
+    return list(retrieve_data_gen(username, password, template, query_args, single_request))
 
+def get_query_args(query_args=None):
+    if not query_args:
+        query_args = {}
+    return query_args
+
+def retrieve_data_gen(username, password, template, query_args=None, single_request=False):
+    auth = get_auth(username, password)
+    query_args = get_query_args(query_args)
+    
+    logger.info(f"The auth for the user is {auth}")
+    per_page = 100
+    page = 0
+
+    while True:
+        page = page + 1
+        request = construct_request(per_page, page, template, auth)  # noqa
+        r, errors = get_response(request, auth, template)
+
+        status_code = int(r.getcode())
+
+        retries = 0
+        while retries < 3 and status_code == 502:
+            print('API request returned HTTP 502: Bad Gateway. Retrying in 5 seconds')
+            retries += 1
+            time.sleep(5)
+            request = construct_request(per_page, page, query_args, template, auth)  # noqa
+            r, errors = get_response(request, auth, template)
+
+            status_code = int(r.getcode())
+
+        if status_code != 200:
+            template = 'API request returned HTTP {0}: {1}'
+            errors.append(template.format(status_code, r.reason))
+            logger.error(errors)
+
+        response = json.loads(r.read().decode('utf-8'))
+        if len(errors) == 0:
+            if type(response) == list:
+                for resp in response:
+                    yield resp
+                if len(response) < per_page:
+                    break
+            elif type(response) == dict and single_request:
+                yield response
+
+        if len(errors) > 0:
+            logger.error(errors)
+
+        if single_request:
+            break
 
 def construct_request(per_page, page, template, auth):
     querystring = urlencode(dict(list({
@@ -392,3 +406,12 @@ def check_git_lfs_install():
     exit_code = subprocess.call(['git', 'lfs', 'version'])
     if exit_code != 0:
         log_error('The argument --lfs requires you to have Git LFS installed.\nYou can get it from https://git-lfs.github.com.')
+
+
+def json_dump(data, output_file):
+    json.dump(data,
+              output_file,
+              ensure_ascii=False,
+              sort_keys=True,
+              indent=4,
+              separators=(',', ': '))
