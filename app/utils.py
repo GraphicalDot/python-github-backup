@@ -1,5 +1,5 @@
 
-
+#-*- coding: utf-8 -*-
 from urllib.parse import urlparse
 from urllib.parse import quote as urlquote
 from urllib.parse import urlencode
@@ -21,106 +21,209 @@ import subprocess
 from Crypto.PublicKey import RSA
 import requests
 import paramiko
+import platform
 
 #curl -u "user:pass" --data '{"title":"test-key","key":"'"$(cat ~/.ssh/id_rsa.pub)"'"}' https://api.github.com/user/keys
 
-def os_command_output(command, final_message):
-
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
-    while True:
-        line = process.stdout.readline()
-        if not line:
-            logger.info(final_message)
-            break
-        yield line.decode().split("\r")[0]
-    return 
-
-
-def append_ssh_config(private_key_path):
-    home = os.path.expanduser("~")
-    ssh_config_path = os.path.join(home, ".ssh", "config") 
-
-    string = f"Host github.com\n\tHostname github.com\n\tPreferredAuthentications publickey\n\tIdentityFile  {private_key_path}"
-    with open(ssh_config_path, "a+") as f:
-        f.write(string)
-    return 
-
-def flush_all_identities():
+class GithubIdentity(object):
     """
-    Removes all previous entries from the ssh, if the user already has 
-    any identitiy added for github , it will be flushed, please handle it 
-    with care 
+    Add new ssh keys to login into the github account on ssh
+    protocol, if the host is already exists the whole process will 
+    abort, The public key will be added automatically to the github
+    account and the config file in .ssh directory will be updated 
+    with the new private key, The keys generated is rsa 2048
     """
-    command = "ssh-add -D"
 
+    def __init__(self, hostname, key_name, ssh_dir=None):
+        """
+        ssh_dir directory for the .ssh configuration and 
+        keypairs 
+        key_name: This will be reflected in your github account
+        username: username for the host
+        password: password for the host
+        """
+        self.hostname = hostname
+        self.key_name = key_name
+        if not ssh_dir:
+            home = os.path.expanduser("~")
+            self.ssh_dir = os.path.join(home, ".ssh") 
+        else:
+            self.ssh_dir = ssh_dir
 
-def check_git_identity_exists(host="github.com"):
-    """
-    Check if git identity already exists on the user machine, 
-    If it does then abort generating new keys and configuring remote github account
-    Use Paramiko
-    """
-    home = os.path.expanduser("~")
-    ssh_config_path = os.path.join(home, ".ssh", "config") 
+        ##check if identity for the host already exists or not
+        if self.identity_exists():
+            raise Exception(f"Identity for {self.hostname} already exists")
 
-    conf = paramiko.SSHConfig()
-    try:
-        with open(ssh_config_path) as f:
-            conf.parse(f)
-    except FileNotFoundError:
-        logger.info("config file doesnt exists")
+        self.public_key = os.path.join(ssh_path, "git_pub.key")
+        self.private_key = os.path.join(ssh_path, "git_priv.key")
+
+        return 
+    
+    def identity_exist(self):
+        """
+        Check if git identity already exists on the user machine, 
+        If it does then abort generating new keys and configuring remote github account
+        Use Paramiko
+        """
+        
+
+        conf = paramiko.SSHConfig()
+        try:
+            with open(os.path.join(self.ssh_dir, "config")) as f:
+                conf.parse(f)
+        except FileNotFoundError:
+            return False
+
+        host_config = conf.lookup(self.hostname)
+        logger.info(host_config)
+
+        if not host_config.get("identityfile"):
+            return False
+
         return True
 
-    host_config = conf.lookup(host)
-    logger.info(host_config)
+    def add(self, username, password):
+        logging.info("Generating new ")
+        privkey, pubkey = self.generate_new_keys()
 
-    if not host_config.get("identityfile"):
-        logger.info(f"Host {host} doesnt exists, Generating new keys")
-        return True
+        ##uploading the keys to the host
+        self.github_upload_keys(pubkey, username, password)
+        
+        ##writing keys to the local ssh configuration files
+        with open(self.private_key_path, "wb") as content_file:
+            content_file.write(privkey)
 
-    logger.error(f"Host {host} exists, Abort Generating new keys")
-
-    return False
-
-def generate_new_keys(username, password):
-    key = RSA.generate(4096)
-    #ssh-keygen -t rsa -C "your_email@example.com"
-    home = os.path.expanduser("~")
-    ssh_path = os.path.join(home, ".ssh")
-    public_key_path = os.path.join(ssh_path, "git_pub.key")
-    private_key_path = os.path.join(ssh_path, "git_priv.key")
-    
-    logger.info(f"Private key path {private_key_path}")
-    if check_git_identity_exists():
-    
-        with open(private_key_path, "wb") as content_file:
-            content_file.write(key.exportKey('PEM'))
-
-
-        command = f"chmod 400 {private_key_path}"
-        for res in os_command_output(command, "Change Private key Permissions"):
+        command = f"chmod 400 {self.private_key_path}"
+        for res in os_command_output(command, "Setting up permissions for {self.hostname} private key"):
             logger.info(res)
 
+        with open(self.public_key_path, 'wb') as content_file:
+            content_file.write(pubkey)
 
-        logger.info("Permissions set for git private key")
-        pubkey = key.publickey()
-        with open(public_key_path, 'wb') as content_file:
-            content_file.write(pubkey.exportKey('OpenSSH'))
-
-        public_bytes = pubkey.exportKey('OpenSSH').decode()
-        response = requests.post('https://api.github.com/user/keys', auth=(username, password), data=json.dumps({
-                "title": "Datapod", "key": public_bytes
-                }))
-
-        
-        logger.info(f"Response from updating git wiht public key {response.json()}")
 
         command = f"ssh-add {private_key_path}"
         for res in os_command_output(command, "New git keys"):
             logger.info(res)
-        append_ssh_config(private_key_path)
+
+        self.append_ssh_config()
+        seff.add_identity()
+        return 
     
-    return 
+
+
+    def generate_new_keys(self):
+        """
+        Change this if you want to use any other cryptographic 
+        algorithm to generate Asymmetric Key pairs
+        """
+        logger.info("Generating RSA keys")
+
+        key = RSA.generate(4096)
+        privkey = key.exportKey('PEM')
+        pubkey = key.publickey().exportKey('OpenSSH')
+        return privkey, pubkey 
+
+    def github_upload_keys(self, pubkey, username, password):
+        """
+        Upload the generated public key on the github
+        """
+        response = requests.post('https://api.github.com/user/keys', auth=(username, password), data=json.dumps({
+                "title": "Datapod", "key": pubkey.decode()
+                }))
+
+        res = response.json()
+        if response.status_code == 401:
+            raise Exception(res.get("message"))
+        if response.status_code == 422:
+            raise Exception(res.get("message"))
+
+        logger.success(res)
+        return 
+
+
+    def os_command_output(command, final_message):
+
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
+        while True:
+            line = process.stdout.readline()
+            if not line:
+                logger.info(final_message)
+                break
+            yield line.decode().split("\r")[0]
+        return 
+
+
+    def append_ssh_config(self):
+
+        if platform.system() == "Darwin":
+            conf_string = f"Host *\n\tAddKeysToAgent yes\n\UseKeychain yes\n\tIdentityFile  {private_key_path}"
+        else:
+            conf_string = f"Host github.com\n\tHostname github.com\n\tPreferredAuthentications publickey\n\tIdentityFile  {private_key_path}"
+        logger.info("String which will be appended to the config file is {string}")
+        with open(os.path.join(self.ssh_dir, "config"), "a+") as f:
+            f.write(conf_string)
+        return 
+
+    def flush_all_identities(self):
+        """
+        Removes all previous entries from the ssh, if the user already has 
+        any identitiy added for github , it will be flushed, please handle it 
+        with care 
+        """
+        command = "ssh-add -D"
+        for res in os_command_output(command, "New git keys"):
+            logger.info(res)
+
+    def add_identity(self):
+        """
+        """
+        if platform.system() == "Darwin":
+            command = "ssh-add -K {self.private_key}"
+        else:
+            command = "ssh-add {self.private_key}"
+        for res in os_command_output(command, "Adding new keys to ssh"):
+            logger.info(res)
+        return 
+
+
+    # def generate_new_keys(username, password):
+    #     #ssh-keygen -t rsa -C "your_email@example.com"
+    #     home = os.path.expanduser("~")
+    #     ssh_path = os.path.join(home, ".ssh")
+    #     public_key_path = os.path.join(ssh_path, "git_pub.key")
+    #     private_key_path = os.path.join(ssh_path, "git_priv.key")
+        
+    #     logger.info(f"Private key path {private_key_path}")
+    #     if check_git_identity_exists():
+        
+    #         with open(private_key_path, "wb") as content_file:
+    #             content_file.write(key.exportKey('PEM'))
+
+
+    #         command = f"chmod 400 {private_key_path}"
+    #         for res in os_command_output(command, "Change Private key Permissions"):
+    #             logger.info(res)
+
+
+    #         logger.info("Permissions set for git private key")
+    #         pubkey = key.publickey()
+    #         with open(public_key_path, 'wb') as content_file:
+    #             content_file.write(pubkey.exportKey('OpenSSH'))
+
+    #         public_bytes = pubkey.exportKey('OpenSSH').decode()
+    #         response = requests.post('https://api.github.com/user/keys', auth=(username, password), data=json.dumps({
+    #                 "title": "Datapod", "key": public_bytes
+    #                 }))
+
+            
+    #         logger.info(f"Response from updating git wiht public key {response.json()}")
+
+    #         command = f"ssh-add {private_key_path}"
+    #         for res in os_command_output(command, "New git keys"):
+    #             logger.info(res)
+    #         append_ssh_config(private_key_path)
+        
+    #     return 
 
 
 

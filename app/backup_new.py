@@ -4,7 +4,7 @@ import sys
 from auth import get_auth,  get_github_api_host
 from urllib.request import Request
 from utils import construct_request, get_response, ensure_directory, \
-        c_pretty_print, mask_password, logging_subprocess, generate_new_keys
+        c_pretty_print, mask_password, logging_subprocess, generate_new_keys, GithubIdentity
 import time 
 from loguru import logger
 from pprint import pformat
@@ -357,7 +357,10 @@ def main():
         logger.error("Please provide username and password for your github") 
     print ("Execution started")
     
-    generate_new_keys(username, password)
+    inst = GithubIdentity("github.com", "Macpod", username, password, ssh_dir=None)
+    ins.add(username, password)
+
+    #generate_new_keys(username, password)
     # dirname = os.path.dirname(os.path.abspath(__file__))
     # output_directory = os.path.join(dirname, "account") 
     # if args.lfs_clone:
