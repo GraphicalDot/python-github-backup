@@ -154,7 +154,7 @@ class GithubIdentity(object):
             conf_string = f"Host *\n\tAddKeysToAgent yes\n\tUseKeychain yes\n\tIdentityFile  {self.private_key}"
         else:
             conf_string = f"Host github.com\n\tHostname github.com\n\tPreferredAuthentications publickey\n\tIdentityFile  {self.private_key}"
-        logger.info(f"String which will be appended to the config file is {string}")
+        logger.info(f"String which will be appended to the config file is {conf_string}")
         with open(os.path.join(self.ssh_dir, "config"), "a+") as f:
             f.write(conf_string)
         return 
@@ -233,7 +233,6 @@ def logging_subprocess(popenargs,
 
 def mask_password(url, secret='*****'):
     parsed = urlparse(url)
-    logger.info(f"parsed {parsed}")
 
     if not parsed.password:
         return url
@@ -248,7 +247,7 @@ def mkdir_p(*args):
         try:
             os.makedirs(path)
         except OSError as exc:  # Python >2.5
-            if exc.errno == errno.EEXIST and os.path.isdir(path):
+            if os.path.isdir(path):
                 pass
             else:
                 raise

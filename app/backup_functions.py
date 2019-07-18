@@ -6,7 +6,7 @@ from loguru import logger
 from utils import retrieve_data, retrieve_data_gen, json_dump
 import codecs
 
-def backup_issues(username, passwod, repo_cwd, repository, repos_template, since=None):
+def backup_issues(username, password, repo_cwd, repository, repos_template, since=None):
     #has_issues_dir = os.path.isdir('{0}/issues/.git'.format(repo_cwd))
     # if args.skip_existing and has_issues_dir:
     #     return
@@ -48,35 +48,37 @@ def backup_issues(username, passwod, repo_cwd, repository, repos_template, since
         issues_skipped_message = ' (skipped {0} pull requests)'.format(
             issues_skipped)
 
-    log_info('Saving {0} issues to disk{1}'.format(
+    logger.info('Saving {0} issues to disk{1}'.format(
         len(list(issues.keys())), issues_skipped_message))
     comments_template = _issue_template + '/{0}/comments'
     events_template = _issue_template + '/{0}/events'
     for number, issue in list(issues.items()):
         #if args.include_issue_comments or args.include_everything:
         template = comments_template.format(number)
-        issues[number]['comment_data'] = retrieve_data(args, template)
+        issues[number]['comment_data'] = retrieve_data(username, password, template)
         #if args.include_issue_events or args.include_everything:
         template = events_template.format(number)
-        issues[number]['event_data'] = retrieve_data(args, template)
+        issues[number]['event_data'] = retrieve_data(username, password, template)
 
         issue_file = '{0}/{1}.json'.format(issue_cwd, number)
         with codecs.open(issue_file, 'w', encoding='utf-8') as f:
             json_dump(issue, f)
     return
 
-def backup_pulls(args, repo_cwd, repository, repos_template):
-    has_pulls_dir = os.path.isdir('{0}/pulls/.git'.format(repo_cwd))
-    if args.skip_existing and has_pulls_dir:
-        return
+def backup_pulls(username, password, repo_cwd, repository, repos_template):
+    
+    #has_pulls_dir = os.path.isdir('{0}/pulls/.git'.format(repo_cwd))
+    # if args.skip_existing and has_pulls_dir:
+    #     return
 
-    log_info('Retrieving {0} pull requests'.format(repository['full_name']))  # noqa
+    logger.info(f"Retrieving {repository['full_name']} pull requests")  # noqa
     pulls_cwd = os.path.join(repo_cwd, 'pulls')
     mkdir_p(repo_cwd, pulls_cwd)
 
     pulls = {}
-    _pulls_template = '{0}/{1}/pulls'.format(repos_template,
-                                             repository['full_name'])
+    pulls_template = f"{repos_template}/{repository['full_name']}/pulls"
+
+    logger.info(f"Pull template is {pulls_template}")
     query_args = {
         'filter': 'all',
         'state': 'all',
@@ -84,47 +86,50 @@ def backup_pulls(args, repo_cwd, repository, repos_template):
         'direction': 'desc',
     }
 
-    if not args.include_pull_details:
-        pull_states = ['open', 'closed']
-        for pull_state in pull_states:
-            query_args['state'] = pull_state
-            _pulls = retrieve_data_gen(args,
-                                   _pulls_template,
-                                   query_args=query_args)
-            for pull in _pulls:
-                if args.since and pull['updated_at'] < args.since:
-                    break
-                if not args.since or pull['updated_at'] >= args.since:
-                    pulls[pull['number']] = pull
-    else:
-        _pulls = retrieve_data_gen(args,
-                               _pulls_template,
-                               query_args=query_args)
-        for pull in _pulls:
-            if args.since and pull['updated_at'] < args.since:
-                break
-            if not args.since or pull['updated_at'] >= args.since:
-                pulls[pull['number']] = retrieve_data(
-                    args,
-                    _pulls_template + '/{}'.format(pull['number']),
-                    single_request=True
-                )[0]
+    # if not args.include_pull_details:
+    #     pull_states = ['open', 'closed']
+    #     for pull_state in pull_states:
+    #         query_args['state'] = pull_state
+    #         _pulls = retrieve_data_gen(args,
+    #                                _pulls_template,
+    #                                query_args=query_args)
+    #         for pull in _pulls:
+    #             if args.since and pull['updated_at'] < args.since:
+    #                 break
+    #             if not args.since or pull['updated_at'] >= args.since:
+    #                 pulls[pull['number']] = pull
+    # else:
+    _pulls = retrieve_data_gen(username, password, 
+                            pulls_template,
+                            query_args=query_args)
 
-    log_info('Saving {0} pull requests to disk'.format(
+    for pull in _pulls:
+        # if args.since and pull['updated_at'] < args.since:
+        #     break
+        # if not args.since or pull['updated_at'] >= args.since:
+             pulls[pull['number']] = retrieve_data(
+                username, password,
+                pulls_template + '/{}'.format(pull['number']),
+                single_request=True
+            )[0]
+
+    logger.info('Saving {0} pull requests to disk'.format(
         len(list(pulls.keys()))))
-    comments_template = _pulls_template + '/{0}/comments'
-    commits_template = _pulls_template + '/{0}/commits'
+    
+    comments_template = pulls_template + '/{0}/comments'
+    commits_template = pulls_template + '/{0}/commits'
+    
     for number, pull in list(pulls.items()):
-        if args.include_pull_comments or args.include_everything:
+            # if args.include_pull_comments or args.include_everything:
             template = comments_template.format(number)
-            pulls[number]['comment_data'] = retrieve_data(args, template)
-        if args.include_pull_commits or args.include_everything:
+            pulls[number]['comment_data'] = retrieve_data(username, password, template)
+            #if args.include_pull_commits or args.include_everything:
             template = commits_template.format(number)
-            pulls[number]['commit_data'] = retrieve_data(args, template)
+            pulls[number]['commit_data'] = retrieve_data(username, password, template)
 
-        pull_file = '{0}/{1}.json'.format(pulls_cwd, number)
-        with codecs.open(pull_file, 'w', encoding='utf-8') as f:
-            json_dump(pull, f)
+            pull_file = '{0}/{1}.json'.format(pulls_cwd, number)
+            with codecs.open(pull_file, 'w', encoding='utf-8') as f:
+                json_dump(pull, f)
 
 
 def backup_milestones(args, repo_cwd, repository, repos_template):

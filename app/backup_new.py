@@ -7,7 +7,7 @@ from utils import construct_request, get_response, ensure_directory, \
         c_pretty_print, mask_password, logging_subprocess,  GithubIdentity,\
              retrieve_data, retrieve_data_gen
 
-from backup_functions import  backup_issues
+from backup_functions import  backup_issues, backup_pulls
 
 import time 
 from loguru import logger
@@ -183,17 +183,21 @@ def backup_repositories(username, password, output_directory, repositories):
 
 
         #download_wiki = (args.include_wiki or args.include_everything)
+        
         if repository['has_wiki']:
+            wiki_url = repo_url.replace('.git', '.wiki.git')
+            logger.info(f"Trying to download wiki for {repository['name']} at {wiki_url}")
+
             fetch_repository(repository['name'],
-                             repo_url.replace('.git', '.wiki.git'),
+                             wiki_url,
                              os.path.join(repo_cwd, 'wiki'),
                             )
 
         #if args.include_issues or args.include_everything:
-        backup_issues(repo_cwd, repository, repos_template)
+        backup_issues(username, password, repo_cwd, repository, repos_template)
 
         # if args.include_pulls or args.include_everything:
-        #     backup_pulls(args, repo_cwd, repository, repos_template)
+        backup_pulls(username, password, repo_cwd, repository, repos_template)
 
         # if args.include_milestones or args.include_everything:
         #     backup_milestones(args, repo_cwd, repository, repos_template)
