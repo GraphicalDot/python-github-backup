@@ -174,9 +174,9 @@ class GithubIdentity(object):
         """
         """
         if platform.system() == "Darwin":
-            command = "ssh-add -K {self.private_key}"
+            command = f"ssh-add -K {self.private_key}"
         else:
-            command = "ssh-add {self.private_key}"
+            command = f"ssh-add {self.private_key}"
         for res in self.os_command_output(command, "Adding new keys to ssh"):
             logger.info(res)
         return 
